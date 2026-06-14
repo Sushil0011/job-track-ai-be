@@ -8,6 +8,6 @@ export default async function routes(
   options: FastifyPluginOptions
 ) {
   fastify.register(jobRoute, { prefix: "job" });
-  fastify.register(authRoutes)
+  fastify.register(authRoutes, { prefix: "auth" });
   fastify.register(userRoutes, { prefix: "user" });
 }

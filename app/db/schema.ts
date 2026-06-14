@@ -2,13 +2,10 @@ import {
   timestamp,
   pgTable,
   text,
-  primaryKey,
-  integer,
   boolean,
   pgEnum,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import type { AdapterAccountType } from "@auth/core/adapters";
 
 // --- ENUMS ---
 export const jobStatusEnum = pgEnum("job_status", [
@@ -27,39 +24,12 @@ export const users = pgTable("user", {
     .$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   email: text("email").unique().notNull(),
-  emailVerified: timestamp("emailVerified", { mode: "date" }),
-  refreshToken: text("refreshToken").notNull(),
-  refreshTokenExpiry: timestamp("refreshTokenExpiry", { mode: "date" }).notNull(),
-  passwordResetToken: text("passwordResetToken"),
-  passwordResetExpiry: timestamp("passwordResetExpiry", { mode: "date" }),
   password: text("password"),
+  refreshTokenHash: text("refreshTokenHash"),
+  refreshTokenExpiry: timestamp("refreshTokenExpiry", { mode: "date" }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
 });
-
-export const accounts = pgTable(
-  "account",
-  {
-    userId: text("userId")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    type: text("type").$type<AdapterAccountType>().notNull(),
-    provider: text("provider").notNull(),
-    providerAccountId: text("providerAccountId").notNull(),
-    refresh_token: text("refresh_token"),
-    access_token: text("access_token"),
-    expires_at: integer("expires_at"),
-    token_type: text("token_type"),
-    scope: text("scope"),
-    id_token: text("id_token"),
-    session_state: text("session_state"),
-  },
-  (account) => ({
-    compoundKey: primaryKey({
-      columns: [account.provider, account.providerAccountId],
-    }),
-  }),
-);
 
 // --- CORE TABLES ---
 export const jobs = pgTable("job", {
@@ -105,7 +75,7 @@ export const reminders = pgTable("reminder", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
 });
 
-// --- RELATIONS (For easier querying) ---
+// --- RELATIONS ---
 export const usersRelations = relations(users, ({ many }) => ({
   jobs: many(jobs),
 }));

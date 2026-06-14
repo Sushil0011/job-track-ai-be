@@ -31,23 +31,13 @@ export const refreshTokenSchema = {
   },
 };
 
-export const forgotPasswordSchema = {
+export const changePasswordSchema = {
   body: {
     type: "object",
-    required: ["email"],
+    required: ["oldPassword", "newPassword"],
     properties: {
-      email: { type: "string", format: "email" },
-    },
-  },
-};
-
-export const resetPasswordSchema = {
-  body: {
-    type: "object",
-    required: ["token", "password"],
-    properties: {
-      token: { type: "string", minLength: 1 },
-      password: { type: "string", minLength: 6 },
+      oldPassword: { type: "string", minLength: 6 },
+      newPassword: { type: "string", minLength: 6 },
     },
   },
 };

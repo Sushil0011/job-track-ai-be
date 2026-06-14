@@ -1,11 +1,8 @@
-import type { FastifyInstance, FastifyPluginOptions } from "fastify";
+import type { FastifyInstance } from "fastify";
+import { sendSuccess } from "../../utils/apiResponse";
 
-export default async function jobRoutes(fastify: FastifyInstance, options: FastifyPluginOptions) {
-    
-  fastify.get("/", async (request, reply) => {
-    return reply.send({
-      status: "success",
-      message: "🚀 JobTrack AI Fastify API is running!",
-    });
+export default async function jobRoutes(fastify: FastifyInstance) {
+  fastify.get("/", async (_request, reply) => {
+    return sendSuccess(reply, { message: "JobTrack AI job routes are running!" });
   });
 }

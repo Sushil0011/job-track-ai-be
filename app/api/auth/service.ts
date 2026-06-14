@@ -1,26 +1,32 @@
-import { users } from "./../../db/schema";
+import { users } from "../../db/schema";
 import { db } from "../../db";
 import { eq } from "drizzle-orm";
-import {
-  generateRefreshToken,
-  generateResetToken,
-  hashToken,
-} from "../../utils/jwt";
+import { generateRefreshToken, hashToken } from "../../utils/jwt";
+import { httpError } from "../../utils/httpError";
 import bcrypt from "bcrypt";
-import type { FastifyError } from "fastify";
+import type { SessionResult } from "./type";
 
-const httpError = (message: string, statusCode: number): FastifyError => {
-  const error = new Error(message) as FastifyError;
-  error.statusCode = statusCode;
-  return error;
-};
+type UserRow = typeof users.$inferSelect;
 
-const publicUserFields = {
-  id: users.id,
-  email: users.email,
-  name: users.name,
-  refreshToken: users.refreshToken,
-  refreshTokenExpiry: users.refreshTokenExpiry,
+const toAuthUser = (user: UserRow) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+});
+
+const saveRefreshToken = async (userId: string) => {
+  const { token, expiryDate } = generateRefreshToken();
+
+  await db
+    .update(users)
+    .set({
+      refreshTokenHash: hashToken(token),
+      refreshTokenExpiry: expiryDate,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+
+  return token;
 };
 
 export const createUser = async (payload: {
@@ -37,16 +43,16 @@ export const createUser = async (payload: {
       email: payload.email.toLowerCase(),
       name: payload.name,
       password: hashedPassword,
-      refreshToken: token,
+      refreshTokenHash: hashToken(token),
       refreshTokenExpiry: expiryDate,
     })
-    .returning(publicUserFields);
+    .returning();
 
   if (!newUser) {
     throw httpError("Failed to create user", 500);
   }
 
-  return newUser;
+  return { user: toAuthUser(newUser), refreshToken: token };
 };
 
 export const findUserByEmail = async (payload: {
@@ -56,8 +62,7 @@ export const findUserByEmail = async (payload: {
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, payload.email.toLowerCase()))
-    .execute();
+    .where(eq(users.email, payload.email.toLowerCase()));
 
   const validPassword = await bcrypt.compare(
     payload.password,
@@ -70,89 +75,78 @@ export const findUserByEmail = async (payload: {
   return user;
 };
 
-export const rotateRefreshToken = async (userId: string) => {
-  const { token, expiryDate } = generateRefreshToken();
-
-  const [updatedUser] = await db
-    .update(users)
-    .set({
-      refreshToken: token,
-      refreshTokenExpiry: expiryDate,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId))
-    .returning(publicUserFields);
-
-  if (!updatedUser) {
-    throw httpError("User not found", 404);
-  }
-
-  return updatedUser;
+export const loginUser = async (user: UserRow): Promise<SessionResult> => {
+  const refreshToken = await saveRefreshToken(user.id);
+  return { user: toAuthUser(user), refreshToken };
 };
 
-export const refreshAccessToken = async (refreshToken: string) => {
+export const refreshSession = async (
+  refreshToken: string,
+): Promise<{ id: string; email: string; name: string }> => {
+  const tokenHash = hashToken(refreshToken);
+
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.refreshToken, refreshToken));
-
-  if (!user || new Date() > user.refreshTokenExpiry) {
-    throw httpError("Invalid or expired refresh token", 401);
-  }
-
-  return rotateRefreshToken(user.id);
-};
-
-export const requestPasswordReset = async (email: string) => {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email.toLowerCase()));
-
-  if (!user) {
-    return null;
-  }
-
-  const { token, expiryDate } = generateResetToken();
-
-  await db
-    .update(users)
-    .set({
-      passwordResetToken: hashToken(token),
-      passwordResetExpiry: expiryDate,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, user.id));
-
-  return token;
-};
-
-export const resetPassword = async (token: string, password: string) => {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.passwordResetToken, hashToken(token)));
+    .where(eq(users.refreshTokenHash, tokenHash));
 
   if (
     !user ||
-    !user.passwordResetExpiry ||
-    new Date() > user.passwordResetExpiry
+    !user.refreshTokenExpiry ||
+    new Date() > user.refreshTokenExpiry
   ) {
-    throw httpError("Invalid or expired reset token", 400);
+    throw httpError(
+      "Session expired. Please log in again.",
+      401,
+    );
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const { token: refreshToken, expiryDate } = generateRefreshToken();
+  return toAuthUser(user);
+};
+
+export const revokeAllSessions = async (userId: string) => {
+  await db
+    .update(users)
+    .set({
+      refreshTokenHash: null,
+      refreshTokenExpiry: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+};
+
+export const changePassword = async (
+  userId: string,
+  oldPassword: string,
+  newPassword: string,
+) => {
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+  if (!user?.password) {
+    throw httpError("User not found", 404);
+  }
+
+  if (oldPassword === newPassword) {
+    throw httpError(
+      "New password must be different from current password",
+      400,
+    );
+  }
+
+  const validPassword = await bcrypt.compare(oldPassword, user.password);
+  if (!validPassword) {
+    throw httpError("Invalid current password", 401);
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
 
   await db
     .update(users)
     .set({
       password: hashedPassword,
-      passwordResetToken: null,
-      passwordResetExpiry: null,
-      refreshToken,
-      refreshTokenExpiry: expiryDate,
       updatedAt: new Date(),
     })
-    .where(eq(users.id, user.id));
+    .where(eq(users.id, userId));
+
+  await revokeAllSessions(userId);
 };

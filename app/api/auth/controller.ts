@@ -2,24 +2,24 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import {
   createUser,
   findUserByEmail,
-  refreshAccessToken,
-  requestPasswordReset,
-  resetPassword,
-  rotateRefreshToken,
+  loginUser,
+  refreshSession,
+  changePassword,
+  revokeAllSessions,
 } from "./service";
 import type {
-  AuthUser,
-  forgotPasswordBody,
+  changePasswordBody,
   loginBody,
   refreshTokenBody,
-  resetPasswordBody,
   signupBody,
 } from "./type";
 import { generateToken } from "../../utils/jwt";
+import { sendSuccess } from "../../utils/apiResponse";
 
-const buildAuthResponse = (
+const buildAuthData = (
   fastify: FastifyRequest["server"],
-  user: AuthUser,
+  user: { id: string; email: string; name: string },
+  refreshToken: string,
 ) => {
   const token = generateToken(
     fastify,
@@ -32,69 +32,58 @@ const buildAuthResponse = (
     email: user.email,
     name: user.name,
     token,
-    refreshToken: user.refreshToken,
+    refreshToken,
   };
 };
 
 export const login = async (req: FastifyRequest, res: FastifyReply) => {
   const user = await findUserByEmail(req.body as loginBody);
-  const refreshedUser = await rotateRefreshToken(user.id);
+  const session = await loginUser(user);
 
-  res.send({
-    status: "success",
-    data: buildAuthResponse(req.server, refreshedUser),
-  });
+  return sendSuccess(
+    res,
+    buildAuthData(req.server, session.user, session.refreshToken),
+  );
 };
 
 export const signup = async (req: FastifyRequest, res: FastifyReply) => {
-  const user = await createUser(req.body as signupBody);
-
-  res.send({
-    status: "success",
-    data: buildAuthResponse(req.server, user),
+  const body = req.body as signupBody;
+  const result = await createUser({
+    email: body.email,
+    password: body.password,
+    name: body.name,
   });
+
+  return sendSuccess(
+    res,
+    buildAuthData(req.server, result.user, result.refreshToken),
+    201,
+  );
+};
+
+export const logout = async (req: FastifyRequest, res: FastifyReply) => {
+  await revokeAllSessions(req.user.id);
+  return sendSuccess(
+    res,
+    undefined,
+    200,
+    "Logged out successfully from all devices",
+  );
 };
 
 export const refreshToken = async (req: FastifyRequest, res: FastifyReply) => {
   const { refreshToken: token } = req.body as refreshTokenBody;
-  const user = await refreshAccessToken(token);
-
-  res.send({
-    status: "success",
-    data: buildAuthResponse(req.server, user),
-  });
+  const user = await refreshSession(token);
+  const accessToken = generateToken(req.server, user, "1h");
+  return sendSuccess(res, { token: accessToken });
 };
 
-export const forgotPassword = async (
+export const changePasswordHandler = async (
   req: FastifyRequest,
   res: FastifyReply,
 ) => {
-  const { email } = req.body as forgotPasswordBody;
-  const resetToken = await requestPasswordReset(email);
+  const { oldPassword, newPassword } = req.body as changePasswordBody;
+  await changePassword(req.user.id, oldPassword, newPassword);
 
-  if (resetToken) {
-    req.log.info(
-      { email, resetToken },
-      "Password reset token generated (dev only — replace with email delivery)",
-    );
-  }
-
-  res.send({
-    status: "success",
-    message:
-      "If an account with that email exists, a password reset link has been sent.",
-  });
-};
-
-export const resetPasswordHandler = async (
-  req: FastifyRequest,
-  res: FastifyReply,
-) => {
-  const { token, password } = req.body as resetPasswordBody;
-  await resetPassword(token, password);
-
-  res.send({
-    status: "success",
-    message: "Password has been reset successfully.",
-  });
+  return sendSuccess(res, undefined, 200, "Password updated successfully.");
 };

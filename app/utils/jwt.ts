@@ -1,14 +1,14 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "crypto";
+import { httpError } from "./httpError";
 
 export const generateToken = (
   fastify: FastifyInstance,
-  payload: object,
+  payload: { id: string; email: string; name: string },
   expiresIn: string,
 ) => {
   return fastify.jwt.sign(payload, { expiresIn });
 };
-
 
 export const generateRefreshToken = () => {
   const expiryDate = new Date();
@@ -27,12 +27,13 @@ export const generateResetToken = () => {
 export const hashToken = (token: string) =>
   crypto.createHash("sha256").update(token).digest("hex");
 
-export const verifyToken = async (request: FastifyRequest, reply: FastifyReply) => {
+export const verifyToken = async (
+  request: FastifyRequest,
+  _reply: FastifyReply,
+) => {
   try {
     await request.jwtVerify();
-  } catch (error) {
-    return reply.code(401).send({
-      message: "Invalid token or token expired",
-    });
+  } catch {
+    throw httpError("Invalid token or token expired", 401);
   }
 };
