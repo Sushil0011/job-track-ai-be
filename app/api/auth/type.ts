@@ -27,6 +27,8 @@ export type resetPasswordBody = {
   newPassword: string;
 };
 
+export type AuthProvider = "EMAIL" | "GOOGLE" | "GITHUB";
+
 export type AuthUser = {
   id: string;
   email: string;

@@ -50,6 +50,7 @@ export const createUser = async (payload: {
     .values({
       email: payload.email.toLowerCase(),
       name: payload.name,
+      authProvider: "EMAIL",
       password: hashedPassword,
       refreshTokenHash: hashToken(token),
       refreshTokenExpiry: expiryDate,
@@ -72,11 +73,15 @@ export const findUserByEmail = async (payload: {
     .from(users)
     .where(eq(users.email, payload.email.toLowerCase()));
 
+  if (!user) {
+    throw httpError("User not found. Please sign up.", 404);
+  }
+
   const validPassword = await bcrypt.compare(
     payload.password,
-    user?.password || "",
+    user.password || "",
   );
-  if (!user || !validPassword) {
+  if (!validPassword) {
     throw httpError("Invalid email or password", 401);
   }
 
@@ -260,7 +265,7 @@ export const loginWithGoogle = async (
   } else {
     const [newUser] = await db
       .insert(users)
-      .values({ email, name })
+      .values({ email, name, authProvider: "GOOGLE" })
       .returning();
 
     if (!newUser) {
@@ -372,7 +377,7 @@ export const loginWithGithub = async (
   } else {
     const [newUser] = await db
       .insert(users)
-      .values({ email, name })
+      .values({ email, name, authProvider: "GITHUB" })
       .returning();
 
     if (!newUser) {

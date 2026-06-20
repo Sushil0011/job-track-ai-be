@@ -17,6 +17,12 @@ export const jobStatusEnum = pgEnum("job_status", [
   "REJECTED",
 ]);
 
+export const authProviderEnum = pgEnum("auth_provider", [
+  "EMAIL",
+  "GOOGLE",
+  "GITHUB",
+]);
+
 // --- AUTH TABLES ---
 export const users = pgTable("user", {
   id: text("id")
@@ -24,6 +30,7 @@ export const users = pgTable("user", {
     .$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   email: text("email").unique().notNull(),
+  authProvider: authProviderEnum("authProvider").default("EMAIL").notNull(),
   password: text("password"),
   refreshTokenHash: text("refreshTokenHash"),
   refreshTokenExpiry: timestamp("refreshTokenExpiry", { mode: "date" }),
