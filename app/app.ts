@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyCookie from "@fastify/cookie";
 import routes from "./routes";
 import globalErrorHandler from "./error";
 import fastifyJwt from "@fastify/jwt";
@@ -26,6 +27,8 @@ export const buildApp = async () => {
     origin: env.FRONTEND_URL,
     credentials: true,
   });
+
+  await fastify.register(fastifyCookie);
 
   await fastify.register(globalErrorHandler);
   await fastify.register(fastifyJwt, {

@@ -8,6 +8,9 @@ import {
   logout,
   forgotPasswordHandler,
   resetPasswordHandler,
+  googleLogin,
+  triggerGithubLogin,
+  githubCallback,
 } from "./controller";
 import {
   signupSchema,
@@ -79,5 +82,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
     schema: resetPasswordSchema,
     config: rateLimitConfig(5, "15 minutes"),
     handler: resetPasswordHandler,
+  });
+
+  fastify.post("/google-login", googleLogin);
+
+  fastify.get("/github", {
+    config: rateLimitConfig(30, "15 minutes"),
+    handler: triggerGithubLogin,
+  });
+
+  fastify.get("/github/callback", {
+    config: rateLimitConfig(30, "15 minutes"),
+    handler: githubCallback,
   });
 }

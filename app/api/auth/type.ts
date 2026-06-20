@@ -46,3 +46,8 @@ export type AuthResponseData = {
   token: string;
   refreshToken: string;
 };
+
+export type GithubOAuthStateCookie = {
+  state: string;
+  returnTo: string;
+};
