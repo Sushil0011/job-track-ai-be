@@ -41,3 +41,24 @@ export const changePasswordSchema = {
     },
   },
 };
+
+export const forgotPasswordSchema = {
+  body: {
+    type: "object",
+    required: ["email"],
+    properties: {
+      email: { type: "string", format: "email" },
+    },
+  },
+};
+
+export const resetPasswordSchema = {
+  body: {
+    type: "object",
+    required: ["token", "newPassword"],
+    properties: {
+      token: { type: "string", minLength: 1 },
+      newPassword: { type: "string", minLength: 6 },
+    },
+  },
+};

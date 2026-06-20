@@ -18,6 +18,15 @@ export type changePasswordBody = {
   newPassword: string;
 };
 
+export type forgotPasswordBody = {
+  email: string;
+};
+
+export type resetPasswordBody = {
+  token: string;
+  newPassword: string;
+};
+
 export type AuthUser = {
   id: string;
   email: string;

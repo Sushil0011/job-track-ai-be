@@ -6,12 +6,16 @@ import {
   refreshToken,
   changePasswordHandler,
   logout,
+  forgotPasswordHandler,
+  resetPasswordHandler,
 } from "./controller";
 import {
   signupSchema,
   loginSchema,
   refreshTokenSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from "./schema";
 import { verifyToken } from "../../utils/jwt";
 import { env } from "../../config/env";
@@ -63,5 +67,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
     schema: changePasswordSchema,
     config: rateLimitConfig(5, "1 hour"),
     handler: changePasswordHandler,
+  });
+
+  fastify.post("/forgot-password", {
+    schema: forgotPasswordSchema,
+    config: rateLimitConfig(5, "1 hour"),
+    handler: forgotPasswordHandler,
+  });
+
+  fastify.post("/reset-password", {
+    schema: resetPasswordSchema,
+    config: rateLimitConfig(5, "15 minutes"),
+    handler: resetPasswordHandler,
   });
 }

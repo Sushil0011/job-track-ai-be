@@ -6,11 +6,15 @@ import {
   refreshSession,
   changePassword,
   revokeAllSessions,
+  requestPasswordReset,
+  resetPasswordWithToken,
 } from "./service";
 import type {
   changePasswordBody,
+  forgotPasswordBody,
   loginBody,
   refreshTokenBody,
+  resetPasswordBody,
   signupBody,
 } from "./type";
 import { generateToken } from "../../utils/jwt";
@@ -38,6 +42,7 @@ const buildAuthData = (
 
 export const login = async (req: FastifyRequest, res: FastifyReply) => {
   const user = await findUserByEmail(req.body as loginBody);
+  console.log(user,'user')
   const session = await loginUser(user);
 
   return sendSuccess(
@@ -82,8 +87,34 @@ export const changePasswordHandler = async (
   req: FastifyRequest,
   res: FastifyReply,
 ) => {
+  console.log(req.body, "res.body");
   const { oldPassword, newPassword } = req.body as changePasswordBody;
   await changePassword(req.user.id, oldPassword, newPassword);
 
   return sendSuccess(res, undefined, 200, "Password updated successfully.");
+};
+
+export const forgotPasswordHandler = async (
+  req: FastifyRequest,
+  res: FastifyReply,
+) => {
+  const { email } = req.body as forgotPasswordBody;
+  await requestPasswordReset(email);
+
+  return sendSuccess(
+    res,
+    undefined,
+    200,
+    "If an account exists with that email, a reset link has been sent.",
+  );
+};
+
+export const resetPasswordHandler = async (
+  req: FastifyRequest,
+  res: FastifyReply,
+) => {
+  const { token, newPassword } = req.body as resetPasswordBody;
+  await resetPasswordWithToken(token, newPassword);
+
+  return sendSuccess(res, undefined, 200, "Password reset successfully.");
 };

@@ -27,6 +27,10 @@ export const users = pgTable("user", {
   password: text("password"),
   refreshTokenHash: text("refreshTokenHash"),
   refreshTokenExpiry: timestamp("refreshTokenExpiry", { mode: "date" }),
+  passwordResetTokenHash: text("passwordResetTokenHash"),
+  passwordResetTokenExpiry: timestamp("passwordResetTokenExpiry", {
+    mode: "date",
+  }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
 });

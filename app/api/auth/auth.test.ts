@@ -1,9 +1,19 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../app";
 import { db } from "../../db";
 import { users } from "../../db/schema";
 import { eq } from "drizzle-orm";
+
+const sentResetEmails: { to: string; resetUrl: string }[] = [];
+
+vi.mock("../../services/email", () => ({
+  sendPasswordResetEmail: vi.fn(
+    async ({ to, resetUrl }: { to: string; resetUrl: string }) => {
+      sentResetEmails.push({ to, resetUrl });
+    },
+  ),
+}));
 
 const testEmail = `test-${Date.now()}@example.com`;
 const testPassword = "password123";
@@ -220,5 +230,97 @@ describe("Auth API", () => {
     expect(response.json().message).toBe(
       "New password must be different from current password",
     );
+  });
+
+  it("forgot-password sends reset email for existing user", async () => {
+    sentResetEmails.length = 0;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/auth/forgot-password",
+      payload: { email: testEmail },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().success).toBe(true);
+    expect(response.json().message).toBe(
+      "If an account exists with that email, a reset link has been sent.",
+    );
+    expect(sentResetEmails).toHaveLength(1);
+    expect(sentResetEmails[0]?.to).toBe(testEmail);
+    expect(sentResetEmails[0]?.resetUrl).toContain("token=");
+  });
+
+  it("forgot-password returns same response for unknown email", async () => {
+    sentResetEmails.length = 0;
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/auth/forgot-password",
+      payload: { email: "unknown@example.com" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().message).toBe(
+      "If an account exists with that email, a reset link has been sent.",
+    );
+    expect(sentResetEmails).toHaveLength(0);
+  });
+
+  it("reset-password updates password and invalidates sessions", async () => {
+    sentResetEmails.length = 0;
+
+    const preResetLogin = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { email: testEmail, password: "newpassword123" },
+    });
+    const oldRefreshToken = preResetLogin.json().data.refreshToken;
+
+    await app.inject({
+      method: "POST",
+      url: "/v1/auth/forgot-password",
+      payload: { email: testEmail },
+    });
+
+    const resetUrl = sentResetEmails[0]?.resetUrl ?? "";
+    const token = new URL(resetUrl).searchParams.get("token");
+    expect(token).toBeTruthy();
+
+    const resetResponse = await app.inject({
+      method: "POST",
+      url: "/v1/auth/reset-password",
+      payload: { token, newPassword: "resetpassword123" },
+    });
+
+    expect(resetResponse.statusCode).toBe(200);
+    expect(resetResponse.json().message).toBe("Password reset successfully.");
+
+    const loginResponse = await app.inject({
+      method: "POST",
+      url: "/v1/auth/login",
+      payload: { email: testEmail, password: "resetpassword123" },
+    });
+    expect(loginResponse.statusCode).toBe(200);
+    accessToken = loginResponse.json().data.token;
+    refreshToken = loginResponse.json().data.refreshToken;
+
+    const oldSessionRefresh = await app.inject({
+      method: "POST",
+      url: "/v1/auth/refresh-token",
+      payload: { refreshToken: oldRefreshToken },
+    });
+    expect(oldSessionRefresh.statusCode).toBe(401);
+  });
+
+  it("reset-password rejects invalid token", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/auth/reset-password",
+      payload: { token: "invalid-token", newPassword: "anotherpassword123" },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toBe("Invalid or expired reset token");
   });
 });

@@ -1,8 +1,14 @@
 import { users } from "../../db/schema";
 import { db } from "../../db";
 import { eq } from "drizzle-orm";
-import { generateRefreshToken, hashToken } from "../../utils/jwt";
+import {
+  generateRefreshToken,
+  generateResetToken,
+  hashToken,
+} from "../../utils/jwt";
 import { httpError } from "../../utils/httpError";
+import { env } from "../../config/env";
+import { sendPasswordResetEmail } from "../../services/email";
 import bcrypt from "bcrypt";
 import type { SessionResult } from "./type";
 
@@ -149,4 +155,63 @@ export const changePassword = async (
     .where(eq(users.id, userId));
 
   await revokeAllSessions(userId);
+};
+
+export const requestPasswordReset = async (email: string) => {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.toLowerCase()));
+
+  if (!user) {
+    return;
+  }
+
+  const { token, expiryDate } = generateResetToken();
+
+  await db
+    .update(users)
+    .set({
+      passwordResetTokenHash: hashToken(token),
+      passwordResetTokenExpiry: expiryDate,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, user.id));
+
+  const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
+  await sendPasswordResetEmail({ to: user.email, resetUrl });
+};
+
+export const resetPasswordWithToken = async (
+  token: string,
+  newPassword: string,
+) => {
+  const tokenHash = hashToken(token);
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.passwordResetTokenHash, tokenHash));
+
+  if (
+    !user ||
+    !user.passwordResetTokenExpiry ||
+    new Date() > user.passwordResetTokenExpiry
+  ) {
+    throw httpError("Invalid or expired reset token", 400);
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  await db
+    .update(users)
+    .set({
+      password: hashedPassword,
+      passwordResetTokenHash: null,
+      passwordResetTokenExpiry: null,
+      refreshTokenHash: null,
+      refreshTokenExpiry: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, user.id));
 };

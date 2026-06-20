@@ -5,6 +5,7 @@ import type {
   FastifyRequest,
   FastifyReply,
 } from "fastify";
+import { env } from "./config/env";
 
 type PostgresLikeError = {
   code?: string;
@@ -113,7 +114,7 @@ const globalErrorHandler: FastifyPluginAsync = async (fastify, _opts) => {
         }
       }
 
-      if (statusCode >= 500) {
+      if (statusCode >= 500 && !env.isDevelopment) {
         message = "Internal Server Error";
       }
 

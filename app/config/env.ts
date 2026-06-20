@@ -44,18 +44,23 @@ export const env = {
   DB_DRIZZLE_URL: process.env.DB_DRIZZLE_URL ?? requireEnv("DATABASE_URL"),
   JWT_SECRET: validateJwtSecret(requireEnv("JWT_SECRET"), nodeEnv),
   FRONTEND_URL: requireEnv("FRONTEND_URL"),
-  EMAIL_API_KEY: process.env.EMAIL_API_KEY ?? "",
+  SMTP_HOST: process.env.SMTP_HOST ?? "",
+  SMTP_PORT: Number(process.env.SMTP_PORT ?? 587),
+  SMTP_SECURE: process.env.SMTP_SECURE === "true",
+  SMTP_USER: process.env.SMTP_USER ?? "",
+  SMTP_PASS: (process.env.SMTP_PASS ?? "").replace(/\s/g, ""),
   EMAIL_FROM: process.env.EMAIL_FROM ?? "",
   isProduction: nodeEnv === "production",
   isDevelopment: nodeEnv === "development",
   isTest: nodeEnv === "test",
 } as const;
 
-if (env.isProduction) {
-  if (!env.EMAIL_API_KEY) {
-    throw new Error("EMAIL_API_KEY is required in production");
-  }
-  if (!env.EMAIL_FROM) {
-    throw new Error("EMAIL_FROM is required in production");
-  }
+export const isSmtpConfigured = Boolean(
+  env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.EMAIL_FROM,
+);
+
+if (env.isProduction && !isSmtpConfigured) {
+  throw new Error(
+    "SMTP_HOST, SMTP_USER, SMTP_PASS, and EMAIL_FROM are required in production",
+  );
 }
