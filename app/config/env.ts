@@ -53,10 +53,12 @@ export const env = {
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? "",
   GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID ?? "",
   GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET ?? "",
-  BACKEND_URL: process.env.BACKEND_URL ?? "http://localhost:8080",
+  BACKEND_URL: process.env.BACKEND_URL ?? "http://localhost:4000",
   isProduction: nodeEnv === "production",
   isDevelopment: nodeEnv === "development",
   isTest: nodeEnv === "test",
+  PORT: Number(process.env.PORT ?? 4000),
+  HOST: process.env.HOST ?? "0.0.0.0",
 } as const;
 
 export const isSmtpConfigured = Boolean(

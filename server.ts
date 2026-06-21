@@ -1,10 +1,11 @@
 import { buildApp } from "./app/app";
+import { env } from "./app/config/env";
 
 const start = async () => {
   try {
     const fastify = await buildApp();
-    await fastify.listen({ port: 8080, host: "0.0.0.0" });
-    console.log("Fastify backend running on http://localhost:8080");
+    await fastify.listen({ port: env.PORT, host: env.HOST });
+    console.log("Fastify backend running ");
   } catch (err) {
     console.error(err);
     process.exit(1);
