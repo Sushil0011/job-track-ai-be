@@ -1,4 +1,8 @@
-import { User, type UserDoc } from "../../db/schema";
+import {
+  User,
+  GithubLoginExchangeCode,
+  type UserDoc,
+} from "../../db/schema";
 import {
   generateRefreshToken,
   generateResetToken,
@@ -364,6 +368,41 @@ export const loginWithGithub = async (
       throw httpError("Failed to create user", 500);
     }
     user = newUser;
+  }
+
+  return loginUser(user);
+};
+export const createGithubLoginExchangeCode = async (userId: string) => {
+  const now = new Date();
+  await GithubLoginExchangeCode.deleteMany({ expiresAt: { $lte: now } });
+
+  const code = crypto.randomBytes(32).toString("base64url");
+  const expiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+  await GithubLoginExchangeCode.create({
+    codeHash: hashToken(code),
+    userId,
+    expiresAt,
+  });
+
+  return code;
+};
+
+export const redeemGithubLoginExchangeCode = async (
+  code: string,
+): Promise<SessionResult> => {
+  const exchange = await GithubLoginExchangeCode.findOneAndDelete({
+    codeHash: hashToken(code),
+    expiresAt: { $gt: new Date() },
+  });
+
+  if (!exchange) {
+    throw httpError("GitHub login session is invalid or expired", 401);
+  }
+
+  const user = await User.findById(exchange.userId);
+
+  if (!user) {
+    throw httpError("GitHub login session is invalid or expired", 401);
   }
 
   return loginUser(user);

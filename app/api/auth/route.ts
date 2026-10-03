@@ -11,6 +11,7 @@ import {
   googleLogin,
   triggerGithubLogin,
   githubCallback,
+  exchangeGithubSession,
 } from "./controller";
 import {
   signupSchema,
@@ -19,6 +20,7 @@ import {
   changePasswordSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  githubExchangeSchema,
 } from "./schema";
 import { verifyToken } from "../../utils/jwt";
 import { env } from "../../config/env";
@@ -94,5 +96,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get("/github/callback", {
     config: rateLimitConfig(30, "15 minutes"),
     handler: githubCallback,
+  });
+
+  fastify.post("/github/exchange", {
+    schema: githubExchangeSchema,
+    config: rateLimitConfig(20, "15 minutes"),
+    handler: exchangeGithubSession,
   });
 }

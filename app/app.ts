@@ -4,6 +4,7 @@ import fastifyCookie from "@fastify/cookie";
 import routes from "./routes";
 import globalErrorHandler from "./error";
 import fastifyJwt from "@fastify/jwt";
+import multipart from "@fastify/multipart";
 import { env } from "./config/env";
 import { sendSuccess } from "./utils/apiResponse";
 import { connectDB, disconnectDB } from "./db";
@@ -39,6 +40,14 @@ export const buildApp = async () => {
   await connectDB();
   fastify.addHook("onClose", async () => {
     await disconnectDB();
+  });
+
+  await fastify.register(multipart, {
+    limits: {
+      fileSize: 5 * 1024 * 1024,
+      files: 1,
+      fields: 5,
+    },
   });
 
   fastify.get("/", async (_request, reply) => {

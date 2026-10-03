@@ -62,3 +62,14 @@ export const resetPasswordSchema = {
     },
   },
 };
+
+export const githubExchangeSchema = {
+  body: {
+    type: "object",
+    required: ["code"],
+    additionalProperties: false,
+    properties: {
+      code: { type: "string", minLength: 32, maxLength: 128 },
+    },
+  },
+};

@@ -12,6 +12,8 @@ import {
   createGithubOAuthState,
   buildGithubAuthorizationUrl,
   loginWithGithub,
+  createGithubLoginExchangeCode,
+  redeemGithubLoginExchangeCode,
 } from "./service";
 import type {
   changePasswordBody,
@@ -28,15 +30,6 @@ import { httpError } from "../../utils/httpError";
 import { env } from "../../config/env";
 
 const OAUTH_STATE_COOKIE = "oauth_state";
-const ACCESS_TOKEN_COOKIE = "token";
-const REFRESH_TOKEN_COOKIE = "refresh_token";
-
-const authCookieOptions = {
-  httpOnly: true,
-  secure: env.isProduction,
-  sameSite: "lax" as const,
-  path: "/",
-};
 
 const buildAuthData = (
   fastify: FastifyRequest["server"],
@@ -60,7 +53,6 @@ const buildAuthData = (
 
 export const login = async (req: FastifyRequest, res: FastifyReply) => {
   const user = await findUserByEmail(req.body as loginBody);
-  console.log(user, "user");
   const session = await loginUser(user);
 
   return sendSuccess(
@@ -105,7 +97,6 @@ export const changePasswordHandler = async (
   req: FastifyRequest,
   res: FastifyReply,
 ) => {
-  console.log(req.body, "res.body");
   const { oldPassword, newPassword } = req.body as changePasswordBody;
   await changePassword(req.user.id, oldPassword, newPassword);
 
@@ -209,21 +200,26 @@ export const githubCallback = async (
 
   try {
     const session = await loginWithGithub(code);
-    const accessToken = generateToken(req.server, session.user, "1h");
+    const exchangeCode = await createGithubLoginExchangeCode(session.user.id);
 
-    res.setCookie(ACCESS_TOKEN_COOKIE, accessToken, {
-      ...authCookieOptions,
-      maxAge: 60 * 60,
-    });
-
-    res.setCookie(REFRESH_TOKEN_COOKIE, session.refreshToken, {
-      ...authCookieOptions,
-      maxAge: 30 * 24 * 60 * 60,
-    });
-
-    return res.redirect(`${env.FRONTEND_URL}/dashboard`);
+    return res.redirect(
+      `${env.FRONTEND_URL}/api/auth/github/callback?code=${encodeURIComponent(exchangeCode)}`,
+    );
   } catch (err) {
     req.server.log.error(err);
     return res.redirect(`${loginUrl}?error=server_error`);
   }
+};
+
+export const exchangeGithubSession = async (
+  req: FastifyRequest,
+  res: FastifyReply,
+) => {
+  const { code } = req.body as { code: string };
+  const session = await redeemGithubLoginExchangeCode(code);
+
+  return sendSuccess(
+    res,
+    buildAuthData(req.server, session.user, session.refreshToken),
+  );
 };

@@ -72,3 +72,77 @@ export const sendPasswordResetEmail = async ({
     );
   }
 };
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>\"']/g, (character) => {
+    const replacements: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      "\"": "&quot;",
+      "'": "&#39;",
+    };
+    return replacements[character] ?? character;
+  });
+
+export const sendReminderEmail = async ({
+  to,
+  name,
+  reminderTitle,
+  companyName,
+  position,
+  reminderDate,
+}: {
+  to: string;
+  name: string;
+  reminderTitle: string;
+  companyName: string;
+  position: string;
+  reminderDate: Date;
+}) => {
+  const formattedDate = reminderDate.toLocaleString();
+  if (!isSmtpConfigured) {
+    console.info(
+      `[dev] Reminder email for ${to}: ${reminderTitle} — ${companyName} (${formattedDate})`,
+    );
+    return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_SECURE,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+  });
+
+  const safeName = escapeHtml(name);
+  const safeTitle = escapeHtml(reminderTitle);
+  const safeCompany = escapeHtml(companyName);
+  const safePosition = escapeHtml(position);
+  const safeDate = escapeHtml(formattedDate);
+
+  try {
+    const info = await transporter.sendMail({
+      from: resolveFromAddress(),
+      to,
+      subject: `JobTrack AI reminder: ${reminderTitle}`,
+      html: `
+        <p>Hi ${safeName},</p>
+        <p>You have a reminder for <strong>${safeTitle}</strong>.</p>
+        <p>${safePosition} at ${safeCompany}<br/>${safeDate}</p>
+        <p>Open JobTrack AI to review your application.</p>
+      `,
+      text: `Hi ${name}, you have a reminder for ${reminderTitle}: ${position} at ${companyName} (${formattedDate}).`,
+    });
+    console.info(`[email] Reminder sent to ${to} (id: ${info.messageId})`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown email error";
+    console.error("[email] SMTP failed:", message);
+    throw httpError(
+      env.isDevelopment
+        ? message
+        : "Failed to send reminder email. Please try again later.",
+      502,
+    );
+  }
+};

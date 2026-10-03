@@ -1,5 +1,19 @@
 import mongoose, { Schema, type HydratedDocument, type InferSchemaType, type Model } from "mongoose";
 
+// API responses keep the `id` field they had with Postgres text ids.
+mongoose.set("toJSON", { virtuals: true });
+mongoose.set("toObject", { virtuals: true });
+
+export const JOB_STATUSES = [
+  "WISHLIST",
+  "APPLIED",
+  "ASSESSMENT",
+  "INTERVIEW",
+  "OFFER",
+  "REJECTED",
+] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+
 // --- SCHEMAS ---
 const userSchema = new Schema(
   {
@@ -38,9 +52,12 @@ const jobSchema = new Schema(
     jobUrl: { type: String },
     location: { type: String },
     salaryRange: { type: String },
+    recruiterName: { type: String },
+    recruiterEmail: { type: String },
+    recruiterPhone: { type: String },
     status: {
       type: String,
-      enum: ["WISHLIST", "APPLIED", "ASSESSMENT", "INTERVIEW", "OFFER", "REJECTED"],
+      enum: [...JOB_STATUSES],
       default: "WISHLIST",
       required: true,
     },
@@ -66,6 +83,22 @@ const noteSchema = new Schema(
   { timestamps: true },
 );
 
+const githubLoginExchangeCodeSchema = new Schema(
+  {
+    codeHash: { type: String, required: true, unique: true },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    expiresAt: { type: Date, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true },
+);
+
+githubLoginExchangeCodeSchema.index({ expiresAt: 1 });
+
 const reminderSchema = new Schema(
   {
     jobId: {
@@ -74,13 +107,17 @@ const reminderSchema = new Schema(
       required: true,
       index: true,
     },
+    title: { type: String, default: "Follow up", required: true },
     reminderDate: { type: Date, required: true },
     completed: { type: Boolean, default: false, required: true },
+    notificationSentAt: { type: Date, default: null },
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
   { timestamps: true },
 );
+
+reminderSchema.index({ completed: 1, reminderDate: 1, notificationSentAt: 1 });
 
 // --- TYPES ---
 export type UserRecord = InferSchemaType<typeof userSchema> & {
@@ -92,6 +129,10 @@ export type JobRecord = InferSchemaType<typeof jobSchema> & {
 export type NoteRecord = InferSchemaType<typeof noteSchema> & {
   _id: mongoose.Types.ObjectId;
 };
+export type GithubLoginExchangeCodeRecord =
+  InferSchemaType<typeof githubLoginExchangeCodeSchema> & {
+    _id: mongoose.Types.ObjectId;
+  };
 export type ReminderRecord = InferSchemaType<typeof reminderSchema> & {
   _id: mongoose.Types.ObjectId;
 };
@@ -117,3 +158,10 @@ export const Note =
 export const Reminder =
   (mongoose.models.Reminder as Model<ReminderRecord>) ??
   mongoose.model<ReminderRecord>("Reminder", reminderSchema);
+
+export const GithubLoginExchangeCode =
+  (mongoose.models.GithubLoginExchangeCode as Model<GithubLoginExchangeCodeRecord>) ??
+  mongoose.model<GithubLoginExchangeCodeRecord>(
+    "GithubLoginExchangeCode",
+    githubLoginExchangeCodeSchema,
+  );
