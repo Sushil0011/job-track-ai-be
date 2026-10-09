@@ -37,7 +37,6 @@ const userSchema = new Schema(
 );
 
 userSchema.index({ refreshTokenHash: 1 });
-userSchema.index({ passwordResetTokenHash: 1 });
 
 const jobSchema = new Schema(
   {
@@ -96,8 +95,6 @@ const githubLoginExchangeCodeSchema = new Schema(
   },
   { timestamps: true },
 );
-
-githubLoginExchangeCodeSchema.index({ expiresAt: 1 });
 
 const reminderSchema = new Schema(
   {
