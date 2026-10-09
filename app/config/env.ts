@@ -40,8 +40,7 @@ const nodeEnv = parseNodeEnv();
 
 export const env = {
   NODE_ENV: nodeEnv,
-  DATABASE_URL: requireEnv("DATABASE_URL"),
-  DB_DRIZZLE_URL: process.env.DB_DRIZZLE_URL ?? requireEnv("DATABASE_URL"),
+  MONGODB_URI: process.env.MONGODB_URI ?? "mongodb://127.0.0.1:27017/jobtrack",
   JWT_SECRET: validateJwtSecret(requireEnv("JWT_SECRET"), nodeEnv),
   FRONTEND_URL: requireEnv("FRONTEND_URL"),
   SMTP_HOST: process.env.SMTP_HOST ?? "",

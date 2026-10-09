@@ -8,6 +8,7 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
       FRONTEND_URL: "http://localhost:3000",
+      JWT_SECRET: "test-jwt-secret-0123456789abcdef",
     },
   },
 });
