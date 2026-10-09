@@ -13,15 +13,20 @@ const buildTestApp = async (
   return app;
 };
 
-const drizzleDuplicateEmailError = () => {
-  const pgError = Object.assign(new Error("duplicate key value"), {
-    code: "23505",
-    detail: "Key (email)=(user@example.com) already exists.",
-    constraint_name: "user_email_unique",
-  });
+const mongoDuplicateEmailError = () => {
+  const mongoError = Object.assign(
+    new Error(
+      "E11000 duplicate key error collection: jobtrack.user index: email_1 dup key: { email: \"user@example.com\" }",
+    ),
+    {
+      code: 11000,
+      keyPattern: { email: 1 },
+      keyValue: { email: "user@example.com" },
+    },
+  );
 
-  return Object.assign(new Error("Failed query: insert into user"), {
-    cause: pgError,
+  return Object.assign(new Error("Failed to create user"), {
+    cause: mongoError,
   });
 };
 
@@ -34,9 +39,9 @@ describe("global error handler", () => {
     }
   });
 
-  it("maps drizzle-wrapped duplicate email to 409", async () => {
+  it("maps mongo duplicate email error to 409", async () => {
     app = await buildTestApp(async () => {
-      throw drizzleDuplicateEmailError();
+      throw mongoDuplicateEmailError();
     });
 
     const response = await app.inject({ method: "GET", url: "/test" });

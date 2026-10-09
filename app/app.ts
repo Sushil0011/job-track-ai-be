@@ -6,6 +6,7 @@ import globalErrorHandler from "./error";
 import fastifyJwt from "@fastify/jwt";
 import { env } from "./config/env";
 import { sendSuccess } from "./utils/apiResponse";
+import { connectDB, disconnectDB } from "./db";
 
 export const buildApp = async () => {
   const fastify = Fastify({
@@ -33,6 +34,11 @@ export const buildApp = async () => {
   await fastify.register(globalErrorHandler);
   await fastify.register(fastifyJwt, {
     secret: env.JWT_SECRET,
+  });
+
+  await connectDB();
+  fastify.addHook("onClose", async () => {
+    await disconnectDB();
   });
 
   fastify.get("/", async (_request, reply) => {

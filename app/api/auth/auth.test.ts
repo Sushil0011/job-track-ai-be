@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../app";
-import { db } from "../../db";
-import { users } from "../../db/schema";
-import { eq } from "drizzle-orm";
+import { User } from "../../db/schema";
 
 const sentResetEmails: { to: string; resetUrl: string }[] = [];
 
@@ -32,7 +30,7 @@ describe("Auth API", () => {
 
   afterAll(async () => {
     if (userId) {
-      await db.delete(users).where(eq(users.id, userId));
+      await User.deleteOne({ _id: userId });
     }
     await app.close();
   });

@@ -1,6 +1,4 @@
-import { users } from "../../db/schema";
-import { db } from "../../db";
-import { eq } from "drizzle-orm";
+import { User, type UserDoc } from "../../db/schema";
 import {
   generateRefreshToken,
   generateResetToken,
@@ -14,10 +12,10 @@ import crypto from "crypto";
 import type { SessionResult } from "./type";
 import { OAuth2Client } from "google-auth-library";
 
-type UserRow = typeof users.$inferSelect;
+type UserRow = UserDoc;
 
 const toAuthUser = (user: UserRow) => ({
-  id: user.id,
+  id: String(user._id),
   email: user.email,
   name: user.name,
 });
@@ -25,14 +23,15 @@ const toAuthUser = (user: UserRow) => ({
 const saveRefreshToken = async (userId: string) => {
   const { token, expiryDate } = generateRefreshToken();
 
-  await db
-    .update(users)
-    .set({
-      refreshTokenHash: hashToken(token),
-      refreshTokenExpiry: expiryDate,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        refreshTokenHash: hashToken(token),
+        refreshTokenExpiry: expiryDate,
+      },
+    },
+  );
 
   return token;
 };
@@ -45,17 +44,14 @@ export const createUser = async (payload: {
   const { token, expiryDate } = generateRefreshToken();
   const hashedPassword = await bcrypt.hash(payload.password, 10);
 
-  const [newUser] = await db
-    .insert(users)
-    .values({
-      email: payload.email.toLowerCase(),
-      name: payload.name,
-      authProvider: "EMAIL",
-      password: hashedPassword,
-      refreshTokenHash: hashToken(token),
-      refreshTokenExpiry: expiryDate,
-    })
-    .returning();
+  const newUser = await User.create({
+    email: payload.email.toLowerCase(),
+    name: payload.name,
+    authProvider: "EMAIL",
+    password: hashedPassword,
+    refreshTokenHash: hashToken(token),
+    refreshTokenExpiry: expiryDate,
+  });
 
   if (!newUser) {
     throw httpError("Failed to create user", 500);
@@ -68,10 +64,7 @@ export const findUserByEmail = async (payload: {
   email: string;
   password: string;
 }) => {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, payload.email.toLowerCase()));
+  const user = await User.findOne({ email: payload.email.toLowerCase() });
 
   if (!user) {
     throw httpError("User not found. Please sign up.", 404);
@@ -89,7 +82,7 @@ export const findUserByEmail = async (payload: {
 };
 
 export const loginUser = async (user: UserRow): Promise<SessionResult> => {
-  const refreshToken = await saveRefreshToken(user.id);
+  const refreshToken = await saveRefreshToken(String(user._id));
   return { user: toAuthUser(user), refreshToken };
 };
 
@@ -98,10 +91,7 @@ export const refreshSession = async (
 ): Promise<{ id: string; email: string; name: string }> => {
   const tokenHash = hashToken(refreshToken);
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.refreshTokenHash, tokenHash));
+  const user = await User.findOne({ refreshTokenHash: tokenHash });
 
   if (
     !user ||
@@ -118,14 +108,15 @@ export const refreshSession = async (
 };
 
 export const revokeAllSessions = async (userId: string) => {
-  await db
-    .update(users)
-    .set({
-      refreshTokenHash: null,
-      refreshTokenExpiry: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        refreshTokenHash: null,
+        refreshTokenExpiry: null,
+      },
+    },
+  );
 };
 
 export const changePassword = async (
@@ -133,7 +124,7 @@ export const changePassword = async (
   oldPassword: string,
   newPassword: string,
 ) => {
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  const user = await User.findById(userId);
 
   if (!user?.password) {
     throw httpError("User not found", 404);
@@ -153,22 +144,16 @@ export const changePassword = async (
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  await db
-    .update(users)
-    .set({
-      password: hashedPassword,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, userId));
+  await User.updateOne(
+    { _id: user._id },
+    { $set: { password: hashedPassword } },
+  );
 
   await revokeAllSessions(userId);
 };
 
 export const requestPasswordReset = async (email: string) => {
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email.toLowerCase()));
+  const user = await User.findOne({ email: email.toLowerCase() });
 
   if (!user) {
     return;
@@ -176,14 +161,15 @@ export const requestPasswordReset = async (email: string) => {
 
   const { token, expiryDate } = generateResetToken();
 
-  await db
-    .update(users)
-    .set({
-      passwordResetTokenHash: hashToken(token),
-      passwordResetTokenExpiry: expiryDate,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, user.id));
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        passwordResetTokenHash: hashToken(token),
+        passwordResetTokenExpiry: expiryDate,
+      },
+    },
+  );
 
   const resetUrl = `${env.FRONTEND_URL}/reset-password?token=${token}`;
   await sendPasswordResetEmail({ to: user.email, resetUrl });
@@ -195,10 +181,7 @@ export const resetPasswordWithToken = async (
 ) => {
   const tokenHash = hashToken(token);
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.passwordResetTokenHash, tokenHash));
+  const user = await User.findOne({ passwordResetTokenHash: tokenHash });
 
   if (
     !user ||
@@ -210,17 +193,18 @@ export const resetPasswordWithToken = async (
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  await db
-    .update(users)
-    .set({
-      password: hashedPassword,
-      passwordResetTokenHash: null,
-      passwordResetTokenExpiry: null,
-      refreshTokenHash: null,
-      refreshTokenExpiry: null,
-      updatedAt: new Date(),
-    })
-    .where(eq(users.id, user.id));
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        password: hashedPassword,
+        passwordResetTokenHash: null,
+        passwordResetTokenExpiry: null,
+        refreshTokenHash: null,
+        refreshTokenExpiry: null,
+      },
+    },
+  );
 };
 
 
@@ -254,19 +238,17 @@ export const loginWithGoogle = async (
   const email = payload.email.toLowerCase();
   const name = payload.name ?? "Google User";
 
-  const [existingUser] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email));
+  const existingUser = await User.findOne({ email });
 
   let user: UserRow;
   if (existingUser) {
     user = existingUser;
   } else {
-    const [newUser] = await db
-      .insert(users)
-      .values({ email, name, authProvider: "GOOGLE" })
-      .returning();
+    const newUser = await User.create({
+      email,
+      name,
+      authProvider: "GOOGLE",
+    });
 
     if (!newUser) {
       throw httpError("Failed to create user", 500);
@@ -366,19 +348,17 @@ export const loginWithGithub = async (
   const email = primaryEmail.email.toLowerCase();
   const name = githubUser.name ?? githubUser.login;
 
-  const [existingUser] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email));
+  const existingUser = await User.findOne({ email });
 
   let user: UserRow;
   if (existingUser) {
     user = existingUser;
   } else {
-    const [newUser] = await db
-      .insert(users)
-      .values({ email, name, authProvider: "GITHUB" })
-      .returning();
+    const newUser = await User.create({
+      email,
+      name,
+      authProvider: "GITHUB",
+    });
 
     if (!newUser) {
       throw httpError("Failed to create user", 500);

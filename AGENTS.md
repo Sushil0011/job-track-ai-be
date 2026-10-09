@@ -12,10 +12,10 @@ This repo is the **Fastify API** that pairs with a **Next.js frontend**. The API
 |-------|--------|
 | Runtime | Node.js (ESM, TypeScript) |
 | HTTP | Fastify 5 |
-| Auth | `@fastify/jwt` (access tokens) + refresh token on `user` row |
+| Auth | `@fastify/jwt` (access tokens) + refresh token on `user` document |
 | Passwords | bcrypt |
-| ORM | Drizzle ORM |
-| Database | PostgreSQL |
+| ORM | Mongoose |
+| Database | MongoDB |
 | Email | Resend (optional; not used for change-password flow) |
 | Dev | `tsx watch` |
 
@@ -23,8 +23,6 @@ This repo is the **Fastify API** that pairs with a **Next.js frontend**. The API
 
 ```bash
 npm run dev          # Start dev server (port 8080)
-npm run db:generate  # Generate Drizzle migrations
-npm run db:push      # Push schema to DB
 npm test             # Run vitest integration tests
 ```
 
@@ -32,8 +30,7 @@ npm test             # Run vitest integration tests
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL` | Postgres connection (runtime) |
-| `DB_DRIZZLE_URL` | Postgres connection (Drizzle Kit migrations) |
+| `MONGODB_URI` | MongoDB connection string (defaults to `mongodb://127.0.0.1:27017/jobtrack`) |
 | `JWT_SECRET` | Secret for signing access JWTs (min 32 chars in production) |
 | `FRONTEND_URL` | CORS origin + password reset link base |
 | `EMAIL_API_KEY` | Resend API key (required in production) |
@@ -50,7 +47,7 @@ app/
     auth/            # Auth routes under /v1/auth/*
     user/            # Authenticated user profile (/v1/user)
     job/             # Job routes (stub)
-  db/                # Drizzle schema + client
+  db/                # Mongoose schemas + connection
   services/email.ts  # Password reset email delivery
   routes/index.ts    # Route registration
   utils/             # jwt, httpError, apiResponse helpers
@@ -101,14 +98,15 @@ Error:
 
 Each feature follows **route → controller → service → schema**.
 
-## Database Schema (key tables)
+## Database Schema (key collections)
 
 ### `user`
-- `id`, `name`, `email`, `password` (bcrypt hash)
+- `name`, `email` (unique index), `authProvider` (`EMAIL`/`GOOGLE`/`GITHUB`), `password` (bcrypt hash)
 - `refreshTokenHash`, `refreshTokenExpiry` — hashed refresh token session
+- `passwordResetTokenHash`, `passwordResetTokenExpiry` — hashed reset token
 
 ### `job`, `note`, `reminder`
-- Job tracking domain tables
+- Job tracking domain collections; `job.userId` → `user._id`, `note.jobId`/`reminder.jobId` → `job._id` (ObjectId references)
 
 ## Frontend Integration Checklist
 
@@ -123,7 +121,7 @@ Each feature follows **route → controller → service → schema**.
 ## Coding Guidelines
 
 - Match existing patterns: thin controllers, logic in services, validation in schemas
-- Use Drizzle (`db.select`, `db.update`, `eq`) — no raw SQL unless necessary
+- Use Mongoose models (`User.findOne`, `User.updateOne`, `User.create`) — no raw driver calls unless necessary
 - Hash passwords with `bcrypt.hash(password, 10)`; never store or return plain passwords
 - Use `httpError(message, statusCode)` from `app/utils/httpError.ts` for business errors
 - Use `sendSuccess` from `app/utils/apiResponse.ts` for success responses

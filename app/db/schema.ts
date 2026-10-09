@@ -1,115 +1,119 @@
-import {
-  timestamp,
-  pgTable,
-  text,
-  boolean,
-  pgEnum,
-} from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import mongoose, { Schema, type HydratedDocument, type InferSchemaType, type Model } from "mongoose";
 
-// --- ENUMS ---
-export const jobStatusEnum = pgEnum("job_status", [
-  "WISHLIST",
-  "APPLIED",
-  "ASSESSMENT",
-  "INTERVIEW",
-  "OFFER",
-  "REJECTED",
-]);
+// --- SCHEMAS ---
+const userSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    authProvider: {
+      type: String,
+      enum: ["EMAIL", "GOOGLE", "GITHUB"],
+      default: "EMAIL",
+      required: true,
+    },
+    password: { type: String },
+    refreshTokenHash: { type: String },
+    refreshTokenExpiry: { type: Date },
+    passwordResetTokenHash: { type: String },
+    passwordResetTokenExpiry: { type: Date },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true },
+);
 
-export const authProviderEnum = pgEnum("auth_provider", [
-  "EMAIL",
-  "GOOGLE",
-  "GITHUB",
-]);
+userSchema.index({ refreshTokenHash: 1 });
+userSchema.index({ passwordResetTokenHash: 1 });
 
-// --- AUTH TABLES ---
-export const users = pgTable("user", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  email: text("email").unique().notNull(),
-  authProvider: authProviderEnum("authProvider").default("EMAIL").notNull(),
-  password: text("password"),
-  refreshTokenHash: text("refreshTokenHash"),
-  refreshTokenExpiry: timestamp("refreshTokenExpiry", { mode: "date" }),
-  passwordResetTokenHash: text("passwordResetTokenHash"),
-  passwordResetTokenExpiry: timestamp("passwordResetTokenExpiry", {
-    mode: "date",
-  }),
-  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
-});
+const jobSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    companyName: { type: String, required: true },
+    position: { type: String, required: true },
+    jobUrl: { type: String },
+    location: { type: String },
+    salaryRange: { type: String },
+    status: {
+      type: String,
+      enum: ["WISHLIST", "APPLIED", "ASSESSMENT", "INTERVIEW", "OFFER", "REJECTED"],
+      default: "WISHLIST",
+      required: true,
+    },
+    applicationDate: { type: Date, default: Date.now },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true },
+);
 
-// --- CORE TABLES ---
-export const jobs = pgTable("job", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  userId: text("userId")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  companyName: text("companyName").notNull(),
-  position: text("position").notNull(),
-  jobUrl: text("jobUrl"),
-  location: text("location"),
-  salaryRange: text("salaryRange"),
-  status: jobStatusEnum("status").default("WISHLIST").notNull(),
-  applicationDate: timestamp("applicationDate", { mode: "date" }).defaultNow(),
-  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
-});
+const noteSchema = new Schema(
+  {
+    jobId: {
+      type: Schema.Types.ObjectId,
+      ref: "Job",
+      required: true,
+      index: true,
+    },
+    content: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true },
+);
 
-export const notes = pgTable("note", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  jobId: text("jobId")
-    .notNull()
-    .references(() => jobs.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
-});
+const reminderSchema = new Schema(
+  {
+    jobId: {
+      type: Schema.Types.ObjectId,
+      ref: "Job",
+      required: true,
+      index: true,
+    },
+    reminderDate: { type: Date, required: true },
+    completed: { type: Boolean, default: false, required: true },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { timestamps: true },
+);
 
-export const reminders = pgTable("reminder", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  jobId: text("jobId")
-    .notNull()
-    .references(() => jobs.id, { onDelete: "cascade" }),
-  reminderDate: timestamp("reminderDate", { mode: "date" }).notNull(),
-  completed: boolean("completed").default(false).notNull(),
-  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow(),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow(),
-});
+// --- TYPES ---
+export type UserRecord = InferSchemaType<typeof userSchema> & {
+  _id: mongoose.Types.ObjectId;
+};
+export type JobRecord = InferSchemaType<typeof jobSchema> & {
+  _id: mongoose.Types.ObjectId;
+};
+export type NoteRecord = InferSchemaType<typeof noteSchema> & {
+  _id: mongoose.Types.ObjectId;
+};
+export type ReminderRecord = InferSchemaType<typeof reminderSchema> & {
+  _id: mongoose.Types.ObjectId;
+};
 
-// --- RELATIONS ---
-export const usersRelations = relations(users, ({ many }) => ({
-  jobs: many(jobs),
-}));
+export type UserDoc = HydratedDocument<UserRecord>;
+export type JobDoc = HydratedDocument<JobRecord>;
+export type NoteDoc = HydratedDocument<NoteRecord>;
+export type ReminderDoc = HydratedDocument<ReminderRecord>;
 
-export const jobsRelations = relations(jobs, ({ one, many }) => ({
-  user: one(users, {
-    fields: [jobs.userId],
-    references: [users.id],
-  }),
-  notes: many(notes),
-  reminders: many(reminders),
-}));
+// --- MODELS (guarded so watch mode / tests can re-import safely) ---
+export const User =
+  (mongoose.models.User as Model<UserRecord>) ??
+  mongoose.model<UserRecord>("User", userSchema);
 
-export const notesRelations = relations(notes, ({ one }) => ({
-  job: one(jobs, {
-    fields: [notes.jobId],
-    references: [jobs.id],
-  }),
-}));
+export const Job =
+  (mongoose.models.Job as Model<JobRecord>) ??
+  mongoose.model<JobRecord>("Job", jobSchema);
 
-export const remindersRelations = relations(reminders, ({ one }) => ({
-  job: one(jobs, {
-    fields: [reminders.jobId],
-    references: [jobs.id],
-  }),
-}));
+export const Note =
+  (mongoose.models.Note as Model<NoteRecord>) ??
+  mongoose.model<NoteRecord>("Note", noteSchema);
+
+export const Reminder =
+  (mongoose.models.Reminder as Model<ReminderRecord>) ??
+  mongoose.model<ReminderRecord>("Reminder", reminderSchema);
